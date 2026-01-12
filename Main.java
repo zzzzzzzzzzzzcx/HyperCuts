@@ -68,13 +68,8 @@ class Interval{
     }
     /// 判断两个区间是否具有公共部分
     boolean isOverlap(Interval interval){
-        if(interval.start >= this.start && interval.start <= this.end)
-            return true;
-        else if (interval.end >= this.start && interval.end <= this.end)
-            return true;
-        else if (interval.start < this.start && interval.end > this.end)
-            return true;
-        return false;
+        return Math.max(this.start, interval.start)
+                <= Math.min(this.end, interval.end);
     }
 }
 
@@ -84,6 +79,7 @@ class Node{
     int [] dims;
     /// 各字段分支数
     int [] cutNum;
+    long [] childrangelength;
     List<Node> children;
     List<Rule> rules;
     Interval[] ranges;
@@ -92,6 +88,7 @@ class Node{
         this.children = new ArrayList<>();
         this.rules = new ArrayList<>();
         this.cutNum = new int[5];
+        this.childrangelength = new long[5];
         dims = new int[5];
         for(int i=0; i<5; i++)
         {
@@ -125,13 +122,13 @@ class Node{
     /// 判断结点与规则之间的包含关系
     public boolean overlapsInAllDimensions(Rule rule)
     {
-        boolean flag = true;
+        //boolean flag = true;
         for(int i=0; i<5; i++)
         {
             if(!this.ranges[i].isOverlap(rule.intervals[i]))
-                flag = false;
+                return false;
         }
-        return flag;
+        return true;
     }
     /// 确定每个字段的分支数
     public int[] getSplitNum(boolean[] isCut)
@@ -197,7 +194,10 @@ class Node{
                             maxcount = child.rules.size();
                         }
                     }
-                    meancount = sumrulenum / (tempchildren.size() - nullLeafnum);
+                    int nonEmpty = tempchildren.size() - nullLeafnum;
+                    if(nonEmpty == 0)
+                        break;
+                    meancount = sumrulenum / nonEmpty;
                     //论文中停止分割的判断条件
                     if(nullLeafnum - lastnullLeafnum > 5 || Math.abs(meancount - lastmeancount) < 0.1 * lastmeancount
                      || Math.abs(maxcount - lastmaxcount) < 0.1 * lastmaxcount || childRangeLength <= 1
@@ -342,6 +342,7 @@ class HyperCutsTree{
                 for(int i=0; i<5; i++)
                 {
                     dimRangelen[i] = node.ranges[i].getRangelength() / splitNum[i];
+                    node.childrangelength[i] = dimRangelen[i];
                 }
 //                System.out.println("The best split num of each dimension is: ");
 //                for(int split : splitNum)
@@ -466,7 +467,14 @@ public class Main {
                     IPadd = Component[4].split("/");
                     //读取十六进制数，协议使用精确匹配
                     int proto = Integer.parseInt(IPadd[0].trim().substring(2), 16);
-                    r.intervals[4] = new Interval(proto, proto); // 范围 [6,6]
+                    mask = Integer.parseInt(IPadd[1].trim().substring(2), 16);
+                    if(mask == 255) {
+                        r.intervals[4] = new Interval(proto, proto); // 范围 [6,6]
+                    } else if (mask == 0) {
+                        //协议号字段无约束
+                        r.intervals[4] = new Interval(0, 255);
+                    }
+
 
                     rule.add(r);
                     index++;
@@ -513,9 +521,8 @@ public class Main {
                         //计算落入子结点的下标
                         for(int i = 0; i < 5; i++)
                         {
-                            long childrange = (node.ranges[i].end - node.ranges[i].start + 1) / node.cutNum[i];
-                            int index = (int) ((Component1[i] - node.ranges[i].start) / childrange);
-                            if(Component1[i] - node.ranges[i].start >= childrange * (node.cutNum[i] - 1))
+                            int index = (int) ((Component1[i] - node.ranges[i].start) / node.childrangelength[i]);
+                            if(index >= node.cutNum[i])
                             {
                                 index = node.cutNum[i] - 1;
                             }
